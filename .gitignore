@@ -47,3 +47,4 @@ app.*.map.json
 # Local dev
 .claude/
 node_modules/
+/public/
