@@ -1,6 +1,7 @@
 class RedditThread {
   final String id;
   final String title;
+  final String author;
   final String subreddit;
   final String selftext;
   final int score;
@@ -13,6 +14,7 @@ class RedditThread {
   RedditThread({
     required this.id,
     required this.title,
+    required this.author,
     required this.subreddit,
     required this.selftext,
     required this.score,
@@ -42,6 +44,7 @@ class RedditThread {
     return RedditThread(
       id: data['id'] as String? ?? '',
       title: title,
+      author: data['author'] as String? ?? '',
       subreddit: data['subreddit'] as String? ?? '',
       selftext: selftext,
       score: (data['score'] as num?)?.toInt() ?? 0,
@@ -59,6 +62,7 @@ class RedditThread {
   Map<String, dynamic> toCacheJson() => {
     'id': id,
     'title': title,
+    'author': author,
     'subreddit': subreddit,
     'selftext': selftext,
     'score': score,
@@ -72,6 +76,7 @@ class RedditThread {
   factory RedditThread.fromCacheJson(Map<String, dynamic> json) => RedditThread(
     id: json['id'] as String,
     title: json['title'] as String,
+    author: json['author'] as String? ?? '',
     subreddit: json['subreddit'] as String,
     selftext: json['selftext'] as String,
     score: json['score'] as int,

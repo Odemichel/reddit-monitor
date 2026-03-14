@@ -8,6 +8,8 @@ class LocalStorageService {
   static const _threadsKey = 'cached_threads';
   static const _commentsKey = 'cached_comments';
   static const _statusesKey = 'item_statuses';
+  static const _bannedUsersKey = 'banned_users';
+  static const _lastScanKey = 'last_scan_date';
 
   late SharedPreferences _prefs;
 
@@ -59,5 +61,37 @@ class LocalStorageService {
   Future<void> saveCachedComments(List<RedditComment> comments) async {
     final list = comments.map((c) => c.toCacheJson()).toList();
     await _prefs.setString(_commentsKey, json.encode(list));
+  }
+
+  // --- Banned users ---
+
+  Set<String> loadBannedUsers() {
+    final list = _prefs.getStringList(_bannedUsersKey);
+    return list?.toSet() ?? {};
+  }
+
+  Future<void> saveBannedUsers(Set<String> users) async {
+    await _prefs.setStringList(_bannedUsersKey, users.toList());
+  }
+
+  // --- Last scan date ---
+
+  DateTime? loadLastScanDate() {
+    final ms = _prefs.getInt(_lastScanKey);
+    return ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+  }
+
+  Future<void> saveLastScanDate(DateTime date) async {
+    await _prefs.setInt(_lastScanKey, date.millisecondsSinceEpoch);
+  }
+
+  // --- Clear all cache ---
+
+  Future<void> clearAll() async {
+    await _prefs.remove(_threadsKey);
+    await _prefs.remove(_commentsKey);
+    await _prefs.remove(_statusesKey);
+    await _prefs.remove(_bannedUsersKey);
+    await _prefs.remove(_lastScanKey);
   }
 }

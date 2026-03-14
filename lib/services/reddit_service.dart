@@ -10,10 +10,8 @@ class RedditService {
   String _buildUrl(String redditUrl) {
     if (kIsWeb) {
       if (kDebugMode) {
-        // Local CORS proxy (run: node proxy.js)
         return 'http://localhost:8888/?url=${Uri.encodeComponent(redditUrl)}';
       }
-      // Vercel serverless function in production
       return '/api/reddit?url=${Uri.encodeComponent(redditUrl)}';
     }
     return redditUrl;
@@ -41,19 +39,19 @@ class RedditService {
     return json.decode(response.body) as List<dynamic>;
   }
 
-  /// Streams threads progressively, one keyword×subreddit at a time.
-  /// [onUpdate] is called each time new matching threads are found.
-  Stream<List<RedditThread>> streamInterestingThreads() async* {
-    final cutoff = DateTime.now().subtract(
-      const Duration(days: maxPostAgeDays),
-    );
+  /// Streams threads progressively with delta scan.
+  /// Only yields posts newer than [lastScanDate].
+  /// First run (lastScanDate == null) fetches everything.
+  Stream<List<RedditThread>> streamInterestingThreads({
+    DateTime? lastScanDate,
+  }) async* {
     final Map<String, RedditThread> threadsMap = {};
 
     for (final keyword in keywords.keys) {
       for (final subreddit in subreddits) {
         try {
           final url =
-              'https://www.reddit.com/r/$subreddit/search.json?q=${Uri.encodeComponent(keyword)}&sort=new&limit=10&restrict_sr=on';
+              'https://www.reddit.com/r/$subreddit/search.json?q=${Uri.encodeComponent(keyword)}&sort=new&limit=25&restrict_sr=on&t=$searchTimeRange';
           final data = await _fetchJson(url);
           final children = (data['data']?['children'] as List<dynamic>?) ?? [];
 
@@ -63,14 +61,18 @@ class RedditService {
               child as Map<String, dynamic>,
               keywords,
             );
-            if (thread.createdUtc.isAfter(cutoff) &&
-                thread.relevanceScore > 3) {
-              if (!threadsMap.containsKey(thread.id) ||
-                  threadsMap[thread.id]!.relevanceScore <
-                      thread.relevanceScore) {
-                threadsMap[thread.id] = thread;
-                hasNew = true;
-              }
+            if (thread.relevanceScore < minRelevanceScore) continue;
+
+            // Delta: skip posts older than last scan
+            if (lastScanDate != null &&
+                thread.createdUtc.isBefore(lastScanDate)) {
+              continue;
+            }
+
+            if (!threadsMap.containsKey(thread.id) ||
+                threadsMap[thread.id]!.relevanceScore < thread.relevanceScore) {
+              threadsMap[thread.id] = thread;
+              hasNew = true;
             }
           }
 
@@ -83,7 +85,7 @@ class RedditService {
           // Skip failed requests silently
         }
         // Throttle to avoid Reddit rate-limiting (429)
-        await Future.delayed(const Duration(milliseconds: 800));
+        await Future.delayed(const Duration(seconds: 2));
       }
     }
   }

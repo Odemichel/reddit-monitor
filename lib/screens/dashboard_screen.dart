@@ -30,6 +30,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _loadingThreads = false;
   bool _loadingComments = false;
   DateTime? _lastUpdated;
+  DateTime? _lastScanDate;
+  int _newPostsFoundThisScan = 0;
   Timer? _autoRefreshTimer;
   StreamSubscription<List<RedditThread>>? _threadsSub;
 
@@ -37,7 +39,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   String? _selectedSubreddit;
   ItemStatus? _selectedThreadStatus;
   ItemStatus? _selectedCommentStatus;
-  bool _hideIgnored = true;
+  final bool _hideIgnored = true;
+  Set<String> _bannedUsers = {};
 
   @override
   void initState() {
@@ -60,6 +63,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     _threads = widget.storage.loadCachedThreads();
     _comments = widget.storage.loadCachedComments();
     _statuses = widget.storage.loadStatuses();
+    _bannedUsers = widget.storage.loadBannedUsers();
+    _lastScanDate = widget.storage.loadLastScanDate();
   }
 
   ItemStatus _statusFor(String id) => _statuses[id] ?? ItemStatus.nouveau;
@@ -69,12 +74,29 @@ class _DashboardScreenState extends State<DashboardScreen>
     widget.storage.saveStatuses(_statuses);
   }
 
+  bool _isUserBanned(String author) =>
+      author.toLowerCase() == redditUsername.toLowerCase() ||
+      _bannedUsers.contains(author.toLowerCase());
+
+  void _banUser(String author) {
+    setState(() => _bannedUsers.add(author.toLowerCase()));
+    widget.storage.saveBannedUsers(_bannedUsers);
+  }
+
+  void _unbanUser(String author) {
+    setState(() => _bannedUsers.remove(author.toLowerCase()));
+    widget.storage.saveBannedUsers(_bannedUsers);
+  }
+
   Future<void> _refresh() async {
     _threadsSub?.cancel();
+    final scanStart = DateTime.now();
+    final previousCount = _threads.length;
 
     setState(() {
       _loadingThreads = true;
       _loadingComments = true;
+      _newPostsFoundThisScan = 0;
     });
 
     // Fetch comments FIRST (few requests, avoid getting rate-limited)
@@ -93,22 +115,31 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     // Then stream threads progressively (many requests, throttled)
-    _threadsSub = _redditService.streamInterestingThreads().listen(
-      (newThreads) {
-        if (!mounted) return;
-        setState(() {
-          _mergeThreads(newThreads);
-          _lastUpdated = DateTime.now();
-        });
-        widget.storage.saveCachedThreads(_threads);
-      },
-      onDone: () {
-        if (mounted) setState(() => _loadingThreads = false);
-      },
-      onError: (_) {
-        if (mounted) setState(() => _loadingThreads = false);
-      },
-    );
+    _threadsSub = _redditService
+        .streamInterestingThreads(lastScanDate: _lastScanDate)
+        .listen(
+          (newThreads) {
+            if (!mounted) return;
+            setState(() {
+              _mergeThreads(newThreads);
+              _newPostsFoundThisScan = _threads.length - previousCount;
+              _lastUpdated = DateTime.now();
+            });
+            widget.storage.saveCachedThreads(_threads);
+          },
+          onDone: () {
+            if (mounted) {
+              setState(() {
+                _loadingThreads = false;
+                _lastScanDate = scanStart;
+              });
+              widget.storage.saveLastScanDate(scanStart);
+            }
+          },
+          onError: (_) {
+            if (mounted) setState(() => _loadingThreads = false);
+          },
+        );
   }
 
   void _mergeThreads(List<RedditThread> incoming) {
@@ -133,6 +164,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   List<RedditThread> get _filteredThreads {
     return _threads.where((t) {
+      if (_isUserBanned(t.author)) return false;
       if (_hideIgnored && _statusFor(t.id) == ItemStatus.ignore) return false;
       if (_selectedSubreddit != null && t.subreddit != _selectedSubreddit) {
         return false;
@@ -147,6 +179,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   List<RedditComment> get _filteredComments {
     return _comments.where((c) {
+      if (_isUserBanned(c.author)) return false;
       if (_hideIgnored && _statusFor(c.id) == ItemStatus.ignore) return false;
       if (_selectedCommentStatus != null &&
           _statusFor(c.id) != _selectedCommentStatus) {
@@ -161,11 +194,78 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   // --- Count badges ---
 
-  int get _newThreadsCount =>
-      _threads.where((t) => _statusFor(t.id) == ItemStatus.nouveau).length;
+  int get _newThreadsCount => _threads
+      .where(
+        (t) =>
+            !_isUserBanned(t.author) && _statusFor(t.id) == ItemStatus.nouveau,
+      )
+      .length;
 
-  int get _newCommentsCount =>
-      _comments.where((c) => _statusFor(c.id) == ItemStatus.nouveau).length;
+  int get _newCommentsCount => _comments
+      .where(
+        (c) =>
+            !_isUserBanned(c.author) && _statusFor(c.id) == ItemStatus.nouveau,
+      )
+      .length;
+
+  void _showBannedUsersDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E2E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Utilisateurs masqués',
+            style: TextStyle(color: Colors.white, fontSize: 18),
+          ),
+          content: SizedBox(
+            width: 300,
+            child: _bannedUsers.isEmpty
+                ? const Text(
+                    'Aucun utilisateur masqué',
+                    style: TextStyle(color: Color(0xFF64748B)),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _bannedUsers.toList().map((user) {
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          'u/$user',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.restore_rounded,
+                            color: Color(0xFF60A5FA),
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            _unbanUser(user);
+                            setDialogState(() {});
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Fermer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   // --- UI ---
 
@@ -204,16 +304,45 @@ class _DashboardScreenState extends State<DashboardScreen>
             Center(
               child: Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Text(
-                  timeago.format(_lastUpdated!),
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Scan ${timeago.format(_lastUpdated!)}',
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 11,
+                      ),
+                    ),
+                    if (_newPostsFoundThisScan > 0 || _loadingThreads)
+                      Text(
+                        _loadingThreads
+                            ? '${_newPostsFoundThisScan} nouveaux...'
+                            : '$_newPostsFoundThisScan nouveaux posts',
+                        style: TextStyle(
+                          color: _newPostsFoundThisScan > 0
+                              ? const Color(0xFF34D399)
+                              : const Color(0xFF64748B),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           _buildRefreshButton(),
+          if (_bannedUsers.isNotEmpty)
+            IconButton(
+              icon: const Icon(
+                Icons.person_off_outlined,
+                color: Color(0xFF94A3B8),
+                size: 20,
+              ),
+              tooltip: 'Utilisateurs masqués',
+              onPressed: _showBannedUsersDialog,
+            ),
           const SizedBox(width: 12),
         ],
         bottom: TabBar(
@@ -410,6 +539,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           thread: thread,
           status: _statusFor(thread.id),
           onStatusChanged: (s) => _setStatus(thread.id, s),
+          onBanUser: () => _banUser(thread.author),
         );
       },
     );
@@ -468,6 +598,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           comment: comment,
           status: _statusFor(comment.id),
           onStatusChanged: (s) => _setStatus(comment.id, s),
+          onBanUser: () => _banUser(comment.author),
         );
       },
     );

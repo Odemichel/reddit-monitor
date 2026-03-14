@@ -8,12 +8,14 @@ class CommentCard extends StatelessWidget {
   final RedditComment comment;
   final ItemStatus status;
   final ValueChanged<ItemStatus> onStatusChanged;
+  final VoidCallback onBanUser;
 
   const CommentCard({
     super.key,
     required this.comment,
     required this.status,
     required this.onStatusChanged,
+    required this.onBanUser,
   });
 
   @override
@@ -106,6 +108,15 @@ class CommentCard extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: onBanUser,
+                      child: Icon(
+                        Icons.person_off_outlined,
+                        size: 14,
+                        color: Colors.white.withValues(alpha: 0.15),
                       ),
                     ),
                     const SizedBox(width: 10),

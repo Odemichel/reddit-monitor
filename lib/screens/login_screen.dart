@@ -15,6 +15,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _controller = TextEditingController();
   String? _error;
+  bool _cacheCleared = false;
 
   void _login() {
     if (_controller.text == appPassword) {
@@ -26,6 +27,11 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       setState(() => _error = 'Mot de passe incorrect');
     }
+  }
+
+  Future<void> _clearCache() async {
+    await widget.storage.clearAll();
+    setState(() => _cacheCleared = true);
   }
 
   @override
@@ -114,6 +120,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Text(
                     'Entrer',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              TextButton.icon(
+                onPressed: _cacheCleared ? null : _clearCache,
+                icon: Icon(
+                  _cacheCleared
+                      ? Icons.check_circle_outline
+                      : Icons.delete_outline_rounded,
+                  size: 16,
+                  color: _cacheCleared
+                      ? const Color(0xFF34D399)
+                      : const Color(0xFF64748B),
+                ),
+                label: Text(
+                  _cacheCleared ? 'Cache vidé' : 'Vider le cache',
+                  style: TextStyle(
+                    color: _cacheCleared
+                        ? const Color(0xFF34D399)
+                        : const Color(0xFF64748B),
+                    fontSize: 13,
                   ),
                 ),
               ),

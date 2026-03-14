@@ -8,12 +8,14 @@ class ThreadCard extends StatelessWidget {
   final RedditThread thread;
   final ItemStatus status;
   final ValueChanged<ItemStatus> onStatusChanged;
+  final VoidCallback onBanUser;
 
   const ThreadCard({
     super.key,
     required this.thread,
     required this.status,
     required this.onStatusChanged,
+    required this.onBanUser,
   });
 
   Color _relevanceColor(int score) {
@@ -118,6 +120,31 @@ class ThreadCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 14),
+                // Author + ban
+                if (thread.author.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        Text(
+                          'u/${thread.author}',
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: onBanUser,
+                          child: Icon(
+                            Icons.person_off_outlined,
+                            size: 14,
+                            color: Colors.white.withValues(alpha: 0.15),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 // Footer row
                 Row(
                   children: [

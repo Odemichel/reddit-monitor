@@ -1,12 +1,12 @@
 {
-    "name": "aerox_reddit_monitor",
-    "short_name": "aerox_reddit_monitor",
+    "name": "AeroX Reddit Monitor",
+    "short_name": "AeroX Monitor",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0F0F1A",
+    "theme_color": "#0F0F1A",
+    "description": "Reddit intelligence dashboard for AeroX",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

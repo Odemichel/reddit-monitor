@@ -1,8 +1,5 @@
 {
-  "buildCommand": null,
+  "buildCommand": "bash build-vercel.sh",
   "outputDirectory": "public",
-  "framework": null,
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "framework": null
 }
